@@ -1,5 +1,5 @@
 from sgp4.api import accelerated, Satrec, SatrecArray
-import itertools 
+import itertools
 
 from itertools import repeat
 import numpy as np
@@ -11,76 +11,74 @@ from multiprocessing import Process, Pool
 
 
 sat_list = []
-global pos_x
-global pos_y
-global pos_z 
+sat_traj_list = []
 
-with open("30sats.txt", 'r') as f:
-    for s, t in itertools.zip_longest(*[f]*2):
-        sat = Satrec.twoline2rv(s, t)
-        sat_list.append(sat)
-
-
-def get_numpy_array_of_timestamps(curr_jd,time_step,days):
+def get_numpy_array_of_timestamps(curr_jd, time_step, days):
     one_sec_in_jd = time_step/(24*60*60)
     date = np.arange(curr_jd, curr_jd+days, one_sec_in_jd)
     jd = np.floor(date)
     fr = date - jd
     return jd, fr, date
 
-def filter_lat_long():
-    pass
+def ecef2lla(pos_x, pos_y, pos_z):
 
-
-def ecef2lla(i):
-    
     transformer = pyproj.Transformer.from_crs(
         {"proj": 'geocent', "ellps": 'WGS84', "datum": 'WGS84'},
         {"proj": 'latlong', "ellps": 'WGS84', "datum": 'WGS84'},
     )
     lona, lata, alta = transformer.transform(
-        pos_x[i], pos_y[i], pos_z[i], radians=False)
+        pos_x, pos_y, pos_z, radians=False)
     return lona, lata, alta
 
-
-sat_traj_list = []
-time_array = []
-def create_sat_traj_list(sat):
+def fx(s,t):
+    sat = Satrec.twoline2rv(s, t)
+    sat_list.append(sat)
     curr_jd = sat.jdsatepoch + sat.jdsatepochF
-    res = get_numpy_array_of_timestamps(curr_jd,1,.05)
+    res = get_numpy_array_of_timestamps(curr_jd, 1, 5)
     _, pos, vel = sat.sgp4_array(res[0], res[1])
     time_array = np.transpose([res[2]])
     sat_traj = np.concatenate((time_array, pos, vel), axis=1)
     sat_traj_list.append(sat_traj)
-    pos_x = sat_traj[:, [1]]
-    pos_y = sat_traj[:, [2]]
-    pos_z = sat_traj[:, [3]]
-    with Pool(6) as p:
-        lat_long = p.starmap(ecef2lla,zip([i for i in range(len(time_array))]))
-    #     print(lat_long)
-    # for i in range(len(time_array)):
-    #     # Process(target=ecef2lla,args=(i, sat_traj[:, [1]], sat_traj[:, [2]], sat_traj[:, [3]])).start()
+    lat_long = ecef2lla(
+    sat_traj[:, [1]], sat_traj[:, [2]], sat_traj[:, [3]])
+    return
 
-    #     lat_long = ecef2lla(
-    #         i, sat_traj[:, [1]], sat_traj[:, [2]], sat_traj[:, [3]])
+def filter_lat_long():
+    pass
+
+
+
+
+
+# def create_sat_traj_list(sat_traj):
     
-    #     sat_traj[i][1] = lat_long[0]
-    #     sat_traj[i][2] = lat_long[1]
-    #     sat_traj[i][3] = lat_long[2]
-    return 1
+#     # sat_traj_list.append(sat_traj)
+
+    
+#     # print(lat_long[0])
+#     # print(np.concatenate(lat_long[0], axis=0))
+#     # sat_traj[:, 1] = np.concatenate(lat_long[0], axis=0)
+#     # sat_traj[:, 2] = np.concatenate(lat_long[1], axis=0)
+#     # sat_traj[:, 3] = np.concatenate(lat_long[2], axis=0)
+#     return 1
+
 
 def main():
-    for sat in sat_list:
-        create_sat_traj_list(sat)
-        break
-        # Process(target=create_sat_traj_list,args=(sat,))
-        
-    
+    with open("27000sats.txt", 'r') as f:
+        for s, t in itertools.zip_longest(*[f]*2):
+            Process(target=fx,args=(s,t)).start()
+
+    # for sat in sat_list:
+        # create_sat_traj_list(sat)
+        # break
+        # with Pool(5) as p:
+        #     p.map(create_sat_traj_list,[sat_traj for sat_traj in sat_traj_list])
+        # # Process(target=create_sat_traj_list,args=(sat,)).start()
+    return
 
 if __name__ == "__main__":
     start_time = time.time()
-    px = Process(target=main)
-    px.start()
-    px.join()
+    main()
+    print(len(sat_traj_list))
 
     print(f"TOTAL TIME: {time.time()-start_time}")
